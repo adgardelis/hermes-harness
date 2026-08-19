@@ -4,9 +4,13 @@ Date: 2026-08-19
 
 **Canonical product name:** **HERMES HARNESS**. DeepSeek Harness/DSH is research provenance only. Internal `result_spill` and `tool_result_storage` identifiers remain compatibility-oriented implementation names.
 
-## Live source
+## Public status note
 
-- Repository: `/Users/anastasios/.hermes/hermes-agent`
+This record describes the hardened reference deployment and its continuity controls. The public repository does not ship the machine-specific watchdog state, recovery bundle, or a one-command production installer. The portable upstream patch and independent review are included under `evidence/upstream/`.
+
+## Reference deployment source
+
+- Repository: `<HERMES_AGENT_CHECKOUT>`
 - Live commit: `c491fb1cbf0637e2a1d38398effb31da46faf65e`
 - Recovery tag: `hermes-result-spill-v1`
 - Complete recovery bundle: `evidence/hermes-result-spill-v1.bundle`
@@ -31,7 +35,7 @@ Date: 2026-08-19
 A deterministic, no-agent watchdog runs every six hours:
 
 - Cron id: `d618c09f87e1`
-- Script: `/Users/anastasios/.hermes/scripts/result-spill-upgrade-guard.py`
+- Script: `<HERMES_HOME>/scripts/result-spill-upgrade-guard.py`
 - Healthy behavior: silent, exit 0.
 - Checks: required source seams, default-off state, real spill capability emission, same-session round trip, cross-session rejection.
 - First manual and cron executions: healthy.

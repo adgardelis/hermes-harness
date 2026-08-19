@@ -1,4 +1,6 @@
-# HERMES HARNESS — Hermes Studio P1 Finalization Record
+# HERMES HARNESS — Historical Hermes Studio P1 Finalization Record
+
+> **Historical evidence:** This document records the original disabled-by-default integration gate as it stood on 2026-08-18. It is not the current installation guide or current runtime status. See `README.md`, `HERMES_HARNESS.md`, and `evidence/PERMANENCE.md` for the later gate closure, active reference deployment, and upstream proposal.
 
 **Finalized:** 2026-08-18  
 **Decision:** Path C — borrow the measured mechanism; do not adopt the DSH runtime.  
@@ -27,8 +29,8 @@ The change adds no model tool, no tool schema, no system-prompt text, and does n
 | Hermes base | `9504edbaea29ce249864a1be05819d972f8fae8d` |
 | Reviewed P1 worktree | `384bce6abaf4f5483e8f156f0965d94e8a314357` |
 | Live Hermes after integration | `fc36c6348f` |
-| Live source root | `/Users/anastasios/.hermes/hermes-agent` |
-| Review worktree | `/Users/anastasios/deepseek-harness-research/p1/hermes-agent` |
+| Live source root | `<HERMES_AGENT_CHECKOUT>` |
+| Review worktree | `<REVIEW_WORKTREE>` |
 
 Seven reviewed commits were cherry-picked in order. Their live SHAs are:
 
@@ -59,7 +61,7 @@ Resolved configuration was checked through the Hermes CLI in both contexts:
 
 A fresh process from neutral `/tmp`, with ambient `PYTHONPATH` removed and only the exact live root supplied, imported:
 
-`/Users/anastasios/.hermes/hermes-agent/tools/result_spill.py`
+`<HERMES_AGENT_CHECKOUT>/tools/result_spill.py`
 
 The same probe passed a 60 KB result through the default configuration and verified:
 
@@ -126,7 +128,7 @@ Therefore P1 introduced no full-suite failure. The unrelated baseline remains re
 
 Before integration, all eight unrelated dirty live files were SHA-256 recorded and backed up at:
 
-`/Users/anastasios/deepseek-harness-research/backups/pre-result-spill-merge-20260818T120514Z`
+`<PRIVATE_EVIDENCE_BACKUP>`
 
 After integration, all eight hashes matched their pre-merge values. A stale, zero-byte `.git/index.lock` with no process holder or Git operation marker was quarantined into that backup. One aborted sequencer attempt was fully rolled back; pre-existing hashes and P1 paths were verified before the successful cherry-pick.
 

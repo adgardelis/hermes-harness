@@ -1,44 +1,123 @@
 # HERMES HARNESS
 
-**HERMES HARNESS** is the Hermes-native context and tool-result economy system for Hermes Agent and Hermes Studio.
+> **More usable context. Fewer wasted tokens. Exact recovery. Native to Hermes.**
 
-> DeepSeek Harness (DSH) is research provenance only. HERMES HARNESS is not a deployment or fork of the DSH runtime. It is a native Hermes implementation built from mechanisms that survived source review, measurement, security hardening, and Hermes-specific integration testing.
+**HERMES HARNESS is an improved, Hermes-native adaptation of DeepSeek Harness—selectively integrating its strongest ideas with capabilities already native to Hermes.**
 
-## Active capability
+It is not a repackaging of the DeepSeek Harness runtime. We studied DSH as a design source, measured its useful mechanisms against Hermes, rejected duplicated or weaker layers, and implemented the surviving ideas directly at Hermes Agent's native model-facing tool boundary.
 
-HERMES HARNESS currently provides:
+[![Status: Research Preview](https://img.shields.io/badge/status-research%20preview-7c3aed)](#current-status)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Upstream PR](https://img.shields.io/badge/Hermes%20Agent-PR%20%2389582-orange)](https://github.com/NousResearch/hermes-agent/pull/89582)
 
-- model-facing tool-result budgeting;
-- context-window-scaled per-result and per-turn budgets;
-- compact inline previews for oversized results;
-- AES-GCM encrypted spill storage;
-- opaque `hermes-spill://` recovery capabilities;
-- same-session recovery and cross-session denial;
-- recovery through Hermes `read_file` and Codex MCP;
-- session propagation through nested `execute_code` RPC;
-- cleanup and upgrade-regression monitoring.
+## Why it exists
 
-It does **not** install the external DSH runtime, Cordis kernel, DSH web application, SurfaceOp, or AST Code Mode.
+Agent sessions waste context when large terminal logs, searches, web extractions, and generated outputs are repeatedly sent back to the model. Naive truncation saves tokens but destroys evidence. HERMES HARNESS takes a different path:
 
-## Upstream contribution
+1. keep normal results inline;
+2. move oversized results out of immediate model context;
+3. retain a compact preview;
+4. encrypt the complete payload;
+5. return an opaque, session-bound recovery capability;
+6. recover exact bytes only when the originating session needs them.
 
-The recoverable session-capability layer is proposed to Hermes Agent in:
+## What is implemented
 
-- [NousResearch/hermes-agent#89582](https://github.com/NousResearch/hermes-agent/pull/89582)
-- Reviewed commit: `d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc`
+- Central model-facing tool-result budgeting
+- Context-window-scaled per-result and per-turn budgets
+- Compact inline previews for oversized output
+- AES-GCM authenticated encryption at rest
+- Opaque `hermes-spill://v1/...` recovery capabilities
+- Same-session recovery and cross-session denial
+- Recovery through Hermes `read_file` and Codex MCP
+- Session propagation through nested `execute_code` RPC
+- Symlink, reparse-point, FIFO/device, ownership, mode, digest, and AEAD validation
+- Cleanup and upgrade-regression monitoring
 
-## Repository contents
+## Why this is Hermes-native
 
-- `HERMES_HARNESS.md` — canonical naming, scope, and runtime identity.
-- `KNOWLEDGE_BASE_INDEX.md` — decision-grade study index.
-- `FINALIZATION.md` — historical integration decision and evidence boundary.
-- `evidence/PERMANENCE.md` — live and upgrade-permanence record.
-- `evidence/upstream/PR_BODY.md` — upstream contribution description.
-- `evidence/upstream/FINAL_REVIEW_GEMINI_3_7_FLASH_HIGH.md` — final independent review.
-- `evidence/upstream/0001-bind-persisted-results-to-session-capabilities.patch` — frozen patch artifact.
+HERMES HARNESS uses structures Hermes already owns:
 
-## Naming rule
+- the existing `tools/tool_result_storage.py` persistence stack;
+- Hermes session identity and tool execution boundaries;
+- the native `read_file` path;
+- Codex MCP transport;
+- `execute_code` RPC propagation;
+- Hermes gateway lifecycle and cleanup.
 
-Always capitalize the product name as **HERMES HARNESS**.
+That avoids introducing a second runtime, event store, plugin kernel, or web application.
 
-Use “DeepSeek Harness” or “DSH” only for the external research source, its original architecture, or historical comparative evidence.
+## What it does not include
+
+HERMES HARNESS does **not** install or run:
+
+- the external DeepSeek Harness runtime;
+- Cordis;
+- the DSH web application;
+- SurfaceOp;
+- DSH AST Code Mode.
+
+“DeepSeek Harness” and “DSH” refer only to research provenance. The Hermes-native product name is always **HERMES HARNESS**.
+
+## Current status
+
+**Research preview / upstream proposal.** The capability layer is running in a private Hermes Studio deployment and has been proposed upstream in [NousResearch/hermes-agent#89582](https://github.com/NousResearch/hermes-agent/pull/89582). It is not yet part of an official Hermes Agent release.
+
+Do not treat this repository as a one-command installer. Until the upstream contribution is merged or a supported extension boundary exists, use the patch only in an isolated Hermes Agent development checkout and review the diff before applying it.
+
+## Verification evidence
+
+The reviewed implementation commit is:
+
+```text
+d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc
+```
+
+Focused verification recorded on those bytes:
+
+- 152 tests plus 7 subtests: capability/storage, Codex MCP, execute-code, persistence
+- 57 tests: Codex app-server runtime and context tracking
+- 9 tests: dispatch session identity and transform hooks
+- 1 focused capability-specific `read_file` test
+- independent Gemini 3.7 Flash High review: **GO, no release blockers**
+
+A live default-policy canary moved a 120,024-byte result out of immediate context, recovered it byte-identically in the same session, rejected a different session, confirmed ciphertext at rest, and cleaned the artifact afterward.
+
+These results establish functional and security behavior. They do **not** yet justify a universal percentage claim for token savings. Public multi-workload benchmarks are on the roadmap.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    T[Hermes tool result] --> B{Within active budget?}
+    B -- yes --> I[Remain inline]
+    B -- no --> E[AES-GCM encrypted spill]
+    E --> C[Session-bound capability]
+    C --> P[Compact preview in model context]
+    C --> R[Hermes read_file / Codex MCP]
+    R --> V{Scope + file + AEAD + digest valid?}
+    V -- yes --> X[Exact recovery]
+    V -- no --> D[Fail closed]
+```
+
+## Study and reproduce
+
+- [Canonical scope and naming](HERMES_HARNESS.md)
+- [Knowledge-base index](KNOWLEDGE_BASE_INDEX.md)
+- [Historical decision record](FINALIZATION.md)
+- [Upgrade-permanence model](evidence/PERMANENCE.md)
+- [Independent final review](evidence/upstream/FINAL_REVIEW_GEMINI_3_7_FLASH_HIGH.md)
+- [Frozen upstream patch](evidence/upstream/0001-bind-persisted-results-to-session-capabilities.patch)
+- [Roadmap](ROADMAP.md)
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md). High-value contributions include reproducible token-economy workloads, security review, Windows reparse-point coverage, transport tests, documentation, and upstream-compatible design work.
+
+## Security
+
+Do not post suspected vulnerabilities in public issues. Follow [SECURITY.md](SECURITY.md).
+
+## License and provenance
+
+HERMES HARNESS is released under the [MIT License](LICENSE). See [NOTICE.md](NOTICE.md) for provenance and naming boundaries.
