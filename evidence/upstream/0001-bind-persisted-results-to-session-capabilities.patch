@@ -1,5 +1,5 @@
-From d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc Mon Sep 17 00:00:00 2001
-From: Anastasios <noreply@users.noreply.github.com>
+From 49b044a322b5a87e4f45fb18e73d09d0b204165e Mon Sep 17 00:00:00 2001
+From: Anastasios Gardelis <314907274+adgardelis@users.noreply.github.com>
 Date: Wed, 19 Aug 2026 01:49:12 +0300
 Subject: [PATCH] fix(tools): bind persisted results to session capabilities
 
@@ -20,7 +20,7 @@ Route oversized tool outputs through opaque same-session recovery URIs, resolve 
  create mode 100644 tests/tools/test_tool_result_capability.py
 
 diff --git a/agent/tool_executor.py b/agent/tool_executor.py
-index 381f1000e9..13a7977a9d 100644
+index 4fedb6dc7d..d901ab1c8c 100644
 --- a/agent/tool_executor.py
 +++ b/agent/tool_executor.py
 @@ -1763,6 +1763,7 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
@@ -45,7 +45,7 @@ index 381f1000e9..13a7977a9d 100644
  
      # ── /steer injection ──────────────────────────────────────────────
      # Append any pending user steer text to the last tool result so the
-@@ -2578,6 +2584,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
+@@ -2579,6 +2585,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
              tool_use_id=tool_call.id,
              env=get_active_env(effective_task_id),
              config=_tool_budget,
@@ -53,7 +53,7 @@ index 381f1000e9..13a7977a9d 100644
          ) if not _is_multimodal_tool_result(function_result) else function_result
  
          # Discover subdirectory context files from tool arguments
-@@ -2684,7 +2691,12 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
+@@ -2685,7 +2692,12 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
      # be discarded when aggregate budget enforcement replaces a tool result.
      num_tools_seq = len(assistant_message.tool_calls)
      if finalize and num_tools_seq > 0:
@@ -67,7 +67,7 @@ index 381f1000e9..13a7977a9d 100644
  
      # ── /steer injection ──────────────────────────────────────────────
      # See _execute_tool_calls_parallel for the rationale. Same hook,
-@@ -2751,6 +2763,7 @@ def execute_tool_calls_segmented(agent, assistant_message, messages: list, effec
+@@ -2752,6 +2764,7 @@ def execute_tool_calls_segmented(agent, assistant_message, messages: list, effec
              messages[-total_tools:],
              env=get_active_env(effective_task_id),
              config=_tool_budget,

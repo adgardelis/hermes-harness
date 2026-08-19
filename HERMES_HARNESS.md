@@ -39,7 +39,8 @@ It does not install or run the external DSH runtime, Cordis kernel, DSH web appl
 
 ## Public runtime identity
 
-- Reviewed implementation commit: `d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc`
+- Current upstream-ready commit: `49b044a322b5a87e4f45fb18e73d09d0b204165e`
+- Stable reviewed patch ID: `629678ef5cc8f0c2b7a7bcad56040c096ac62df3`
 - Upstream draft PR: https://github.com/NousResearch/hermes-agent/pull/89582
 - Public repository: https://github.com/adgardelis/hermes-harness
 

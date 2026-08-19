@@ -1,47 +1,100 @@
-## HERMES HARNESS
+## What does this PR do?
 
-This PR contributes the recoverable tool-result capability layer of **HERMES HARNESS**, the Hermes-native context and tool-result economy system.
+Extends Hermes Agent's existing persisted tool-result system with opaque, same-session recovery capabilities.
 
-**Naming boundary:** DeepSeek Harness/DSH is research provenance only. This is not an installation of the DSH runtime; it is a native extension of Hermes Agent's existing result-storage architecture.
+Oversized model-facing tool results receive a `hermes-spill://v1/...` capability instead of exposing a host cache path. The complete payload is AES-GCM encrypted at rest and can be recovered through Hermes `read_file` only by the session that minted the capability. Direct transports, Codex MCP, concurrent/sequential tool execution, and nested `execute_code` RPC preserve the same session scope.
 
-## Summary
+This is the recoverable capability layer developed as part of **HERMES HARNESS**, a Hermes-native context and tool-result economy project. DeepSeek Harness was research provenance; this PR does not add its runtime, Cordis, web application, SurfaceOp, or AST Code Mode.
 
-- bind oversized model-facing tool results to opaque `hermes-spill://v1/...` capabilities scoped to the current Hermes session;
-- resolve capabilities host-side through `read_file` before ordinary backend path routing;
-- preserve the existing path-based spillover behavior only for legacy callers without session context;
-- support direct transports and Codex MCP, including capability-only `read_file` registration;
-- propagate session scope through concurrent/sequential agent execution and nested local/remote `execute_code` RPC calls.
+The implementation extends `tools/tool_result_storage.py`; it does not introduce a second spill engine or a new model tool.
 
-## Security properties
+## Related Issue
 
-- scoped persistence fails closed to a bounded preview if capability storage is unavailable; it never downgrades to a predictable host or sandbox path;
-- payloads are AES-GCM authenticated ciphertext at rest;
-- the bearer token is present only in the URI; filenames contain its SHA-256 locator, not the token itself;
-- the session scope and plaintext digest are authenticated as AES-GCM associated data;
-- resolution validates session scope, bearer token-derived filename, symlink/reparse status, opened-file identity, regular-file type, POSIX mode/ownership where available, AEAD tag, and plaintext digest;
-- FIFO/device replacements are opened nonblocking and rejected as non-regular files;
-- ordinary filesystem paths remain rejected by the Codex capability reader.
+Related to #23200, #70949, and #415. Also compared against the overlapping path-oriented draft #85480 and storage-hardening PR #80760; this PR's distinct scope is encrypted, opaque, session-bound recovery.
 
-## Compatibility
+## Type of Change
 
-- capability encryption keys are deterministically derived from the random bearer token in the URI, so valid capabilities remain recoverable after process restart without a profile-wide secret;
-- local, Docker, SSH, Modal, and Daytona legacy spill behavior is unchanged for callers without a session ID;
-- direct `model_tools.handle_function_call` transports now use the same persistence seam as the agent executor;
-- `execute_code` forwards the parent session ID through both UDS and remote file-RPC dispatch.
+- [x] 🐛 Bug fix (non-breaking change that fixes an issue)
+- [x] 🔒 Security fix
+- [x] ✅ Tests (adding or improving test coverage)
 
-## Verification
+## Changes Made
 
-Fresh focused runs on commit `d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc`:
+- Add session-bound capability minting and resolution in `tools/tool_result_storage.py`.
+- Encrypt scoped spill payloads with AES-GCM and authenticate session scope plus plaintext digest.
+- Hide bearer tokens from filenames and validate scope, digest, symlink/reparse metadata, file identity, type, ownership, mode, AEAD tag, and plaintext digest.
+- Intercept capabilities in `tools/file_tools.py` before ordinary backend/path routing.
+- Propagate session IDs through `agent/tool_executor.py`, `model_tools.py`, and nested local/remote `execute_code` RPC.
+- Add a capability-only `read_file` handler to the Hermes MCP transport; ordinary filesystem paths remain rejected there.
+- Add focused regression tests for exact recovery, cross-session denial, encrypted storage, filesystem attacks, scoped write failure, MCP transport, central dispatch, and RPC propagation.
 
-- `152 passed, 7 subtests passed` — result capability/storage, Codex MCP, execute-code local/mode coverage, incremental persistence;
-- `57 passed` — Codex app-server runtime/integration and context tracking;
-- `9 passed` — dispatch session-ID and transform-hook behavior;
-- `1 passed` — capability-specific `read_file` path;
-- `git diff --check` clean;
-- changed production modules compile with `py_compile`.
+## How to Test
 
-A broad macOS `tests/tools/test_file_tools.py` run has two unrelated existing assertions that expect `/tmp/...` while the implementation canonicalizes it to `/private/tmp/...`; the capability-specific read path passes.
+```bash
+python -m pytest -q \
+  tests/tools/test_tool_result_capability.py \
+  tests/run_agent/test_tool_call_incremental_persistence.py \
+  tests/tools/test_code_execution.py \
+  tests/tools/test_code_execution_modes.py
 
-## Scope
+uv run --extra mcp python -m pytest -q \
+  tests/agent/transports/test_hermes_tools_mcp_server.py
 
-This extends the existing `tools/tool_result_storage.py` mechanism rather than introducing a second storage engine. It does not add the DeepSeek Harness runtime, Cordis, web application, or SurfaceOp abstractions.
+python -m pytest -q \
+  tests/agent/transports/test_codex_app_server_runtime.py \
+  tests/run_agent/test_codex_app_server_integration.py \
+  tests/cli/test_cli_codex_context_reference.py \
+  tests/agent/transports/test_codex_transport.py
+
+python -m pytest -q \
+  tests/test_transform_tool_result_hook.py \
+  tests/run_agent/test_run_agent.py \
+  -k 'session_id or transform_tool_result'
+
+python -m ruff check \
+  tools/tool_result_storage.py tools/file_tools.py tools/code_execution_tool.py \
+  model_tools.py agent/tool_executor.py agent/transports/hermes_tools_mcp_server.py \
+  tests/tools/test_tool_result_capability.py \
+  tests/agent/transports/test_hermes_tools_mcp_server.py \
+  tests/run_agent/test_tool_call_incremental_persistence.py \
+  tests/tools/test_code_execution.py tests/tools/test_code_execution_modes.py
+
+git diff --check origin/main...HEAD
+scripts/run_tests.sh
+```
+
+Verification after the final rebase onto current `origin/main` (`5dd15872a6`):
+
+- 106 passed + 7 subtests — capability/storage, incremental persistence, execute-code local/mode coverage.
+- 12 passed — Hermes MCP transport under the pinned MCP extra.
+- 147 passed — Codex app-server runtime/integration, context reference, and transport.
+- 6 passed, 260 deselected — dispatch session-ID and transform-hook focus.
+- Ruff passed on all changed Python files.
+- `py_compile` passed on changed production modules and the capability test.
+- `git diff --check` passed.
+- Stable patch ID is unchanged from the independently reviewed pre-rebase commit: `629678ef5cc8f0c2b7a7bcad56040c096ac62df3`.
+- Full `scripts/run_tests.sh` differential was run immediately before the final five-commit upstream advance: the feature and a clean sparse checkout of exact base `74f99af470` both reported the same 81 failures across the same 23 files. None of those files is changed by this PR. After the final rebase to `5dd15872a6`, every affected suite above was rerun green and the stable patch ID remained unchanged.
+
+## Checklist
+
+### Code
+
+- [x] I've read the Contributing Guide.
+- [x] My commit follows Conventional Commits.
+- [x] I searched existing PRs and issues and documented the overlapping work above.
+- [x] My PR contains only changes related to this capability/security layer.
+- [ ] I've run the preferred full wrapper, but this macOS environment is not baseline-green: feature and exact-base runs both report the same 81 failures in the same 23 unrelated files. The differential is clean and the affected suites pass; GitHub CI remains the platform-matrix arbiter.
+- [x] I've added tests for my changes.
+- [x] I've tested on macOS 26.4, Apple Silicon.
+
+### Documentation & Housekeeping
+
+- [x] Documentation update: N/A — no public config or user-facing command is added.
+- [x] `cli-config.yaml.example`: N/A — no config keys are added or changed.
+- [x] `CONTRIBUTING.md` / `AGENTS.md`: N/A — no workflow or architecture policy is changed.
+- [x] Cross-platform impact considered; Windows reparse metadata and POSIX filesystem boundaries have focused coverage.
+- [x] Tool descriptions/schemas updated where behavior changed: the MCP reader is explicitly capability-only and rejects ordinary paths.
+
+## Screenshots / Logs
+
+Not applicable. The behavior and security boundaries are exercised by automated tests and exact recovery probes.

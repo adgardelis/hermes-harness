@@ -1,7 +1,9 @@
 # Final Antigravity Review — Gemini 3.7 Flash High
 
-**Frozen commit:** `d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc`  
+**Frozen commit:** `d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc`
 **Base:** `origin/main` (`b359db72ee53e052a31066f9fcac2f3ba0566a49`)
+
+**Rebase continuity note (2026-08-19):** the upstream-ready commit `49b044a322b5a87e4f45fb18e73d09d0b204165e` rebases this change onto `origin/main` `5dd15872a6`. Both commits have stable patch ID `629678ef5cc8f0c2b7a7bcad56040c096ac62df3`; the independently reviewed diff is unchanged. Fresh post-rebase affected suites are recorded in the PR.
 
 ## VERDICT: GO
 

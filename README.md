@@ -69,11 +69,13 @@ Do not treat this repository as a one-command installer. Until the upstream cont
 
 ## Verification evidence
 
-The reviewed implementation commit is:
+The current upstream-ready implementation commit is:
 
 ```text
-d0155e2c83011ef0ed7b5b1d39bf2640c3daa5dc
+49b044a322b5a87e4f45fb18e73d09d0b204165e
 ```
+
+It is rebased onto Hermes Agent `5dd15872a6`. Its stable patch ID is `629678ef5cc8f0c2b7a7bcad56040c096ac62df3`, byte-equivalent to the independently reviewed pre-rebase patch.
 
 Focused verification recorded on those bytes:
 
