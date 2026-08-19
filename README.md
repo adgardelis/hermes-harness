@@ -1,8 +1,10 @@
 # HERMES HARNESS
 
+![HERMES HARNESS — More usable context, fewer wasted tokens, exact recovery, native to Hermes](assets/hermes-harness-banner.svg)
+
 > **More usable context. Fewer wasted tokens. Exact recovery. Native to Hermes.**
 
-**HERMES HARNESS is an improved, Hermes-native adaptation of DeepSeek Harness—selectively integrating its strongest ideas with capabilities already native to Hermes.**
+**HERMES HARNESS is an improved adaptation of DeepSeek Harness, designed specifically to take advantage of capabilities native to Hermes.**
 
 It is not a repackaging of the DeepSeek Harness runtime. We studied DSH as a design source, measured its useful mechanisms against Hermes, rejected duplicated or weaker layers, and implemented the surviving ideas directly at Hermes Agent's native model-facing tool boundary.
 

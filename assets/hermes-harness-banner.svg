@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">HERMES HARNESS</title>
+  <desc id="desc">More usable context. Fewer wasted tokens. Exact recovery. Native to Hermes.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#090b16"/>
+      <stop offset="0.55" stop-color="#17112f"/>
+      <stop offset="1" stop-color="#071d28"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="0.5" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1280" height="640" rx="36" fill="url(#bg)"/>
+  <g opacity="0.22" stroke="#67e8f9" fill="none">
+    <path d="M90 130h250l70 70h220"/>
+    <path d="M1190 510H940l-70-70H650"/>
+    <circle cx="90" cy="130" r="7" fill="#67e8f9"/>
+    <circle cx="1190" cy="510" r="7" fill="#67e8f9"/>
+  </g>
+  <g transform="translate(110 194)">
+    <path d="M0 0h54v92h94V0h54v242h-54v-98H54v98H0z" fill="url(#accent)" filter="url(#glow)"/>
+  </g>
+  <text x="360" y="274" fill="#f8fafc" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="76" font-weight="800" letter-spacing="5">HERMES</text>
+  <text x="360" y="365" fill="url(#accent)" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="76" font-weight="800" letter-spacing="5">HARNESS</text>
+  <rect x="360" y="397" width="690" height="4" rx="2" fill="url(#accent)"/>
+  <text x="360" y="458" fill="#cbd5e1" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="25" font-weight="500">MORE USABLE CONTEXT · FEWER WASTED TOKENS</text>
+  <text x="360" y="500" fill="#94a3b8" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="22">Exact recovery. Native to Hermes.</text>
+</svg>
