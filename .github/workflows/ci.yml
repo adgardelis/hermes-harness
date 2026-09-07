@@ -99,8 +99,8 @@ jobs:
           except Exception as e:
               print("resolve fails:", type(e).__name__, e)
           scope = trs._scope_hash("diag-session")
-          digest = uri.split("/")[3]
-          cap = uri.split("/")[4]
+          digest = uri.split("/")[4]
+          cap = uri.split("/")[5]
           p = trs.get_spillover_dir() / trs._capability_filename(scope, digest, cap)
           print("st_size:", p.stat().st_size)
           fd = os.open(p, os.O_RDONLY)
