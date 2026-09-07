@@ -1,0 +1,27 @@
+^DHERMES HARNESS v0.2 demo — public benchmark suite
+module: tools/tool_result_storage.py @ 49b044a322b5a87e4f45fb18e73d09d0b204165e
+
+wrote /tmp/hh-demo-run2/raw_results.json
+results: 15  failures: 0  fidelity<100%: 0
+CHECK PASSED
+
+# HERMES HARNESS benchmark summary
+
+- Generated (UTC): 2026-09-07T02:03:35+00:00
+- Module under test: `tools/tool_result_storage.py` @ `49b044a322b5a87e4f45fb18e73d09d0b204165e`
+- Environment: Darwin 25.6.0 (arm64), Apple M5 Max, Python 3.11.15 (CPython), cryptography 50.0.0
+- Cache telemetry: N/A offline (schema in benchmarks/README.md)
+- Timed reps per measurement: 3 (median reported)
+
+## Profiles (derived by the module's `budget_for_context_window`)
+
+| profile | context window (tokens) | per-result budget (chars) | per-turn budget (chars) | preview (chars) |
+|---|---|---|---|---|
+| profile-32k | 32,768 | 19,660 | 39,321 | 1,500 |
+| profile-131k | 131,072 | 78,643 | 157,286 | 1,500 |
+| profile-1m | 1,048,576 | 100,000 | 200,000 | 1,500 |
+
+## Single-result workloads
+
+| workload | profile | before (chars) | after (chars) | reduction | persist e2e (ms) | spill write (ms) | resolve (ms) | fidelity | head in preview | tail in preview | middle recovered | tail recovered | cross-session denied |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

@@ -14,12 +14,12 @@
 
 ## v0.2 — Public proof package
 
-- [ ] Reproducible benchmark harness using representative Hermes tool workloads
-- [ ] Before/after input-token, latency, and recovery-fidelity report
-- [ ] Multiple provider/context-window profiles
-- [ ] Threat model and attack matrix
-- [ ] Cross-platform CI, including Windows reparse-point coverage
-- [ ] Short recorded demonstration
+- [x] Reproducible benchmark harness using representative Hermes tool workloads (`benchmarks/`, issue #1)
+- [x] Before/after input-token, latency, and recovery-fidelity report (`docs/BENCHMARK_REPORT.md`)
+- [x] Multiple provider/context-window profiles (`docs/PROFILES.md`: 32k / 131k / 1M; provider cache telemetry schema documented, N/A offline)
+- [x] Threat model and attack matrix (`docs/THREAT_MODEL.md`)
+- [x] Cross-platform CI, including Windows reparse-point coverage (`.github/workflows/ci.yml`)
+- [x] Short recorded demonstration (`docs/demo/`)
 
 ## v0.3 — Supported adoption path
 
