@@ -459,6 +459,11 @@ def main() -> int:
     print(f"wrote {raw_path}")
     print(f"results: {len(data['results'])}  failures: {n_fail}  "
           f"fidelity<100%: {n_bad_fidelity}")
+    # Surface failure details in the job log too, so CI diagnosis does not
+    # depend on the artifact upload succeeding.
+    for f in data["failures"]:
+        print(f"FAILURE {f['workload']} / {f['profile']}: {f['error']}",
+              file=sys.stderr)
 
     if args.check and (n_fail or n_bad_fidelity):
         print("CHECK FAILED", file=sys.stderr)
