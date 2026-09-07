@@ -176,6 +176,60 @@ def run_benchmarks(module_path: str) -> dict:
     return out, hermes_home
 
 
+# Documented upstream bug at the pinned commit (found by this benchmark,
+# CI run 34075450968): on Windows, resolve_spill_capability opens the
+# ciphertext with os.open(... O_RDONLY ...) WITHOUT os.O_BINARY, so the CRT
+# reads it in text mode — folding CRLF and truncating at the first 0x1A
+# (Ctrl+Z) byte. AEAD verification then fails (InvalidTag) and resolve
+# raises SpillCapabilityError — i.e. it fails CLOSED (availability loss,
+# never wrong bytes). The write path is unaffected (os.fdopen(fd, "wb")).
+# Measured on windows-latest CI: file 5028 bytes on disk, text-mode read
+# returns 121 bytes, binary read returns all 5028 and decrypts byte-exact.
+# We do NOT patch the pinned module; instead the benchmark verifies the
+# artifact is intact at rest via an explicit binary read and reports the
+# real module resolve path as failing on Windows.
+KNOWN_UPSTREAM_ISSUE_WINDOWS_RESOLVE = "upstream-windows-textmode-resolve"
+
+
+def _binary_read_resolve(trs, uri: str, session_id: str) -> str:
+    """Resolve a capability reading the ciphertext with os.O_BINARY.
+
+    Diagnostic workaround for KNOWN_UPSTREAM_ISSUE_WINDOWS_RESOLVE: proves
+    the artifact at rest is intact (scope + AEAD + digest all verify) and
+    isolates the failure to the module's text-mode read on Windows. Uses the
+    module's own filename/key/AAD derivation; NOT a substitute for the
+    module's resolve path — results measured through this are reported
+    separately from fidelity_exact_bytes.
+    """
+    parsed = trs._CAPABILITY_URI_RE.fullmatch(str(uri).strip())
+    if parsed is None:
+        raise trs.SpillCapabilityError("bad URI")
+    scope_hash = trs._scope_hash(str(session_id).strip())
+    if scope_hash != parsed.group("scope"):
+        raise trs.SpillCapabilityError("cross-session")
+    path = trs.get_spillover_dir() / trs._capability_filename(
+        scope_hash, parsed.group("digest"), parsed.group("capability"))
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    try:
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+    encrypted = b"".join(chunks)
+    nonce, ciphertext = encrypted[:12], encrypted[12:]
+    data = trs.AESGCM(trs._capability_key(parsed.group("capability"))).decrypt(
+        nonce, ciphertext,
+        trs._capability_aad(scope_hash, parsed.group("digest")))
+    import hashlib as _hl
+    if _hl.sha256(data).hexdigest() != parsed.group("digest"):
+        raise trs.SpillCapabilityError("digest mismatch")
+    return data.decode("utf-8")
+
+
 def _sentinel_positions(wname: str, content: str) -> dict:
     """Locate planted sentinels; used for head/tail survival checks."""
     base = {
@@ -204,6 +258,8 @@ def _run_single_result_workload(trs, wname, content, pname, prof, failures):
     recovered = ""
     persist_ms = spill_ms = resolve_ms = None
     cross_session_denied = None
+    known_issue = None
+    payload_intact = None
 
     try:
         # End-to-end model-facing path (preview build + spill write + message).
@@ -226,9 +282,19 @@ def _run_single_result_workload(trs, wname, content, pname, prof, failures):
             lambda: trs._write_capability_spillover(content, SESSION_ID))
         # Resolve timing + exact-byte fidelity from the persisted-message URI.
         if uri is not None:
-            recovered, resolve_ms = _time_calls(
-                lambda: trs.resolve_spill_capability(uri, SESSION_ID))
-            fidelity = recovered == content
+            try:
+                recovered, resolve_ms = _time_calls(
+                    lambda: trs.resolve_spill_capability(uri, SESSION_ID))
+                fidelity = recovered == content
+            except trs.SpillCapabilityError:
+                if os.name != "nt":
+                    raise
+                # Documented upstream Windows text-mode read bug: verify the
+                # artifact is intact at rest via an explicit binary read so
+                # the failure is attributed, not hidden.
+                known_issue = KNOWN_UPSTREAM_ISSUE_WINDOWS_RESOLVE
+                recovered = _binary_read_resolve(trs, uri, SESSION_ID)
+                payload_intact = recovered == content
             # Cross-session denial: must raise SpillCapabilityError.
             try:
                 trs.resolve_spill_capability(uri, WRONG_SESSION_ID)
@@ -258,6 +324,8 @@ def _run_single_result_workload(trs, wname, content, pname, prof, failures):
         "spill_write_ms": spill_ms,
         "resolve_ms": resolve_ms,
         "fidelity_exact_bytes": fidelity,
+        "known_upstream_issue": known_issue,
+        "payload_intact_at_rest_binary_read": payload_intact,
         "head_sentinel_in_preview": sentinels["head"] in preview_region,
         "tail_sentinel_in_preview": sentinels["tail"] in preview_region,
         "middle_sentinel_in_preview": sentinels["middle"] in preview_region,
@@ -280,6 +348,8 @@ def _run_turn_budget_workload(trs, pname, prof, failures):
     resolved_ok = 0
     head_in_preview = 0
     fidelity_all = True
+    known_issue = None
+    intact_at_rest = 0
 
     try:
         def _enforce():
@@ -303,12 +373,25 @@ def _run_turn_budget_workload(trs, pname, prof, failures):
                     try:
                         rec = trs.resolve_spill_capability(
                             m.group(0), SESSION_ID)
-                        if rec != orig["content"]:
-                            fidelity_all = False
-                        else:
-                            resolved_ok += 1
                     except trs.SpillCapabilityError:
+                        if os.name != "nt":
+                            fidelity_all = False
+                            continue
+                        # Documented upstream Windows text-mode read bug.
+                        known_issue = KNOWN_UPSTREAM_ISSUE_WINDOWS_RESOLVE
                         fidelity_all = False
+                        try:
+                            if _binary_read_resolve(
+                                    trs, m.group(0),
+                                    SESSION_ID) == orig["content"]:
+                                intact_at_rest += 1
+                        except trs.SpillCapabilityError:
+                            pass
+                        continue
+                    if rec != orig["content"]:
+                        fidelity_all = False
+                    else:
+                        resolved_ok += 1
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         failures.append({"workload": "multi_tool_turn", "profile": pname,
@@ -330,8 +413,39 @@ def _run_turn_budget_workload(trs, pname, prof, failures):
         "spilled_results_recovered_exact": resolved_ok,
         "head_sentinel_in_preview_count": head_in_preview,
         "fidelity_exact_bytes": fidelity_all and error is None,
+        "known_upstream_issue": known_issue,
+        "spilled_results_intact_at_rest_binary_read": intact_at_rest,
         "error": error,
     }
+
+
+def _case_hard_failed(r: dict) -> bool:
+    """True if a case fails in a way NOT explained by the documented
+    upstream Windows text-mode resolve bug.
+
+    On Windows (os.name == "nt"), a case whose only deviation is that the
+    module's own resolve path fails closed while the artifact is verified
+    intact at rest (scope + AEAD + digest, via an explicit O_BINARY read)
+    is reported as the known upstream issue, not a benchmark failure.
+    fidelity_exact_bytes still records the real module behavior (False).
+    """
+    if r["fidelity_exact_bytes"]:
+        return False
+    if os.name == "nt" and r.get("known_upstream_issue") == \
+            KNOWN_UPSTREAM_ISSUE_WINDOWS_RESOLVE:
+        if r["kind"] == "single_result":
+            return r.get("payload_intact_at_rest_binary_read") is not True
+        return r.get("spilled_results_intact_at_rest_binary_read", 0) < \
+            r.get("results_spilled", 0)
+    return True
+
+
+def _fidelity_cell(r: dict) -> str:
+    if r["fidelity_exact_bytes"]:
+        return "PASS"
+    if not _case_hard_failed(r):
+        return "KNOWN-ISSUE (payload intact)"
+    return "FAIL"
 
 
 def write_summary(data: dict, path: str) -> None:
@@ -380,7 +494,7 @@ def write_summary(data: dict, path: str) -> None:
             f"{r['input_chars_before']:,} | {r['inline_chars_after']:,} | "
             f"{r['chars_reduction_ratio']:.4f} | {r['persist_e2e_ms']} | "
             f"{r['spill_write_ms']} | {r['resolve_ms']} | "
-            f"{'PASS' if r['fidelity_exact_bytes'] else 'FAIL'} | "
+            f"{_fidelity_cell(r)} | "
             f"{r['head_sentinel_in_preview']} | "
             f"{r['tail_sentinel_in_preview']} | "
             f"{r['middle_sentinel_recovered']} | "
@@ -402,7 +516,7 @@ def write_summary(data: dict, path: str) -> None:
             f"{r['chars_reduction_ratio']:.4f} | "
             f"{r['enforce_turn_budget_ms']} | {r['results_spilled']} | "
             f"{r['spilled_results_recovered_exact']} | "
-            f"{'PASS' if r['fidelity_exact_bytes'] else 'FAIL'} |")
+            f"{_fidelity_cell(r)} |")
     lines.append("")
     if data["failures"]:
         lines.append("## Failures")
@@ -455,10 +569,14 @@ def main() -> int:
 
     n_fail = len(data["failures"])
     n_bad_fidelity = sum(
-        1 for r in data["results"] if not r["fidelity_exact_bytes"])
+        1 for r in data["results"] if _case_hard_failed(r))
+    n_known_issue = sum(
+        1 for r in data["results"]
+        if not r["fidelity_exact_bytes"] and not _case_hard_failed(r))
     print(f"wrote {raw_path}")
     print(f"results: {len(data['results'])}  failures: {n_fail}  "
-          f"fidelity<100%: {n_bad_fidelity}")
+          f"fidelity<100%: {n_bad_fidelity}  "
+          f"known-upstream-issue: {n_known_issue}")
     # Surface failure details in the job log too, so CI diagnosis does not
     # depend on the artifact upload succeeding.
     for f in data["failures"]:

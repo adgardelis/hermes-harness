@@ -78,60 +78,42 @@ jobs:
         run: python -m pip install --upgrade pip pytest cryptography pyyaml
         shell: bash
 
-      # TEMPORARY diagnostic (will be removed): pinpoint why
-      # resolve_spill_capability fails closed on Windows for a same-session
-      # URI. Hypothesis: the resolve-side os.open() lacks O_BINARY, so the
-      # CRT reads ciphertext in text mode (CRLF folding / Ctrl+Z truncation)
-      # and AEAD verification fails.
-      - name: Diagnose Windows resolve failure
-        working-directory: hermes-agent
-        run: |
-          export HERMES_HOME="$RUNNER_TEMP/diag-hermes-home"
-          python - <<'PY'
-          import os
-          from tools import tool_result_storage as trs
-          payload = "x" * 5000
-          uri = trs._write_capability_spillover(payload, "diag-session")
-          print("uri minted:", uri is not None)
-          try:
-              trs.resolve_spill_capability(uri, "diag-session")
-              print("resolve: OK")
-          except Exception as e:
-              print("resolve fails:", type(e).__name__, e)
-          scope = trs._scope_hash("diag-session")
-          digest = uri.split("/")[4]
-          cap = uri.split("/")[5]
-          p = trs.get_spillover_dir() / trs._capability_filename(scope, digest, cap)
-          print("st_size:", p.stat().st_size)
-          fd = os.open(p, os.O_RDONLY)
-          text_data = os.read(fd, 1 << 20)
-          os.close(fd)
-          print("default(text)-mode read len:", len(text_data))
-          fd = os.open(p, os.O_RDONLY | getattr(os, "O_BINARY", 0))
-          bin_data = os.read(fd, 1 << 20)
-          os.close(fd)
-          print("binary-mode read len:", len(bin_data))
-          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-          nonce, ct = bin_data[:12], bin_data[12:]
-          out = AESGCM(trs._capability_key(cap)).decrypt(
-              nonce, ct, trs._capability_aad(scope, digest))
-          print("binary decrypt round-trip OK:", out.decode() == payload)
-          try:
-              AESGCM(trs._capability_key(cap)).decrypt(
-                  text_data[:12], text_data[12:], trs._capability_aad(scope, digest))
-              print("text-mode decrypt: OK")
-          except Exception as e:
-              print("text-mode decrypt fails:", type(e).__name__)
-          PY
-        shell: bash
-
       # ROADMAP v0.2 requires Windows reparse-point coverage. At commit
       # 49b044a, `git show --stat` confirms tests/tools/test_tool_result_capability.py
       # exists and carries the reparse/symlink/fail-closed suite
       # (test_reparse_metadata_is_rejected_before_open et al.).
       # tests/tools/test_result_spill.py does NOT exist at this commit
       # (verified via git ls-tree), so it is intentionally not listed.
+      # KNOWN UPSTREAM BUG at pinned commit 49b044a (found by this repo's
+      # benchmark, CI run 34075450968, verified by in-CI diagnostic):
+      # resolve_spill_capability opens the ciphertext with os.open()
+      # WITHOUT os.O_BINARY, so on Windows the CRT reads it in text mode
+      # (CRLF folding / Ctrl+Z truncation) and AEAD verification fails.
+      # The failure is CLOSED (availability loss, never wrong bytes); the
+      # artifact at rest is intact. 4 tests depend on a successful
+      # same-session resolve and therefore cannot pass on Windows until
+      # upstream adds O_BINARY. They are deselected from the gate (not
+      # deleted: the next step still runs them and reports their status)
+      # and tracked in docs/BENCHMARK_REPORT.md. The reparse-point and
+      # fail-closed security tests -- the purpose of this job -- still gate.
       - name: Run upstream capability tests (reparse/symlink handling)
         working-directory: hermes-agent
-        run: python -m pytest tests/tools/test_tool_result_capability.py -v || true
+        run: >
+          python -m pytest tests/tools/test_tool_result_capability.py -v
+          --deselect tests/tools/test_tool_result_capability.py::test_capability_round_trip_is_exact_and_host_path_is_hidden
+          --deselect tests/tools/test_tool_result_capability.py::test_read_file_paginates_capability_before_backend_routing
+          --deselect tests/tools/test_tool_result_capability.py::test_capability_read_obeys_existing_char_budget
+          --deselect tests/tools/test_tool_result_capability.py::test_central_dispatch_spills_direct_transport_result
+        shell: bash
+
+      # Non-gating visibility for the known upstream Windows bug: these 4
+      # tests are expected to FAIL until upstream adds O_BINARY to the
+      # resolve-side os.open(). If they start passing (e.g. the pinned
+      # commit moves to a fixed upstream), remove the deselects above.
+      - name: Resolve-dependent tests (expected to fail on Windows; informational)
+        working-directory: hermes-agent
+        run: >
+          python -m pytest tests/tools/test_tool_result_capability.py -v
+          -k "round_trip_is_exact or paginates_capability or obeys_existing_char_budget or spills_direct_transport"
+          || true
         shell: bash
