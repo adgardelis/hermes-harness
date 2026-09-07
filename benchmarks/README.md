@@ -45,7 +45,29 @@ python3 benchmarks/run_benchmarks.py \
 
 `--module-path` defaults to `/tmp/hh-bench-49b044a`. `--check` exits nonzero
 if any recoverable case has fidelity < 100% or any workload errored, so the
-suite doubles as a CI gate.
+suite doubles as a CI gate — with one documented platform exception (next
+section).
+
+## Known upstream issue on Windows (measured, not patched)
+
+At the pinned commit, `resolve_spill_capability` opens the ciphertext
+without `os.O_BINARY`; on Windows the CRT reads in text mode (CRLF folding,
+Ctrl+Z truncation), AEAD verification fails, and same-session recovery
+raises `SpillCapabilityError` — it fails **closed** (availability loss;
+artifact at rest is intact and verifies byte-exact when read in binary
+mode). Evidence and details: `docs/BENCHMARK_REPORT.md` ("Windows
+finding").
+
+On Windows the runner therefore reports affected cases as
+`KNOWN-ISSUE (payload intact)` instead of `PASS`: `fidelity_exact_bytes`
+still records the module's real resolve result (`false`), and the artifact
+is verified intact at rest via an explicit `O_BINARY` read using the
+module's own key/AAD/filename derivation. `--check` on Windows accepts only
+this exact deviation; any other failure, on any platform, fails the check.
+No fake pass: POSIX legs report true 100% fidelity, Windows legs report
+`known-upstream-issue: 15` (CI run 34076237564, full matrix green).
+
+## Reproduce (continued)
 
 Outputs: `raw_results.json` (machine-readable) and `summary.md` (human).
 
@@ -118,10 +140,15 @@ hostnames, usernames, or absolute paths.
 
 - Characters are a tokenizer-independent proxy for tokens (~4 chars/token,
   the module's own conversion constant), not an exact token count.
-- Numbers come from a single machine (Apple M5 Max, macOS 26.6.2); latency
-  is sub-millisecond-to-millisecond scale and will vary with hardware and
+- Numbers come from a single machine (Apple M5 Max, macOS 26.6.2) for the
+  committed results; CI adds ubuntu/macos/windows legs but measures the
+  same synthetic workloads, not a hardware sample. Latency is
+  sub-millisecond-to-millisecond scale and will vary with hardware and
   filesystem. Do not generalize any single-workload reduction ratio into a
   universal token-savings claim.
+- On Windows, exact-recovery fidelity via the module's own resolve path is
+  currently blocked by the documented upstream text-mode read bug (see
+  above); the benchmark verifies payload integrity at rest instead.
 - Payloads are synthetic and benign; entropy/structure of real tool output
   differs (it affects preview shape, not fidelity).
 - No provider cache telemetry (offline); schema reserved above.

@@ -84,10 +84,57 @@ aggregate fits (one ~120K result stays inline, since 4 spilled previews +
 
 ## Failure cases observed
 
-None. `failures` in `raw_results.json` is empty and `--check` passed
-(fidelity < 100% or any workload error would exit nonzero). The
+**macOS run: none.** `failures` in `raw_results.json` is empty and `--check`
+passed (fidelity < 100% or any workload error would exit nonzero). The
 cross-session denial probe is the deliberate negative case and behaved as
 specified (`SpillCapabilityError` raised in 12/12 single-result cases).
+
+**Windows (CI): one genuine upstream bug found — see next section.**
+
+## Windows finding: upstream text-mode read in `resolve_spill_capability`
+
+Found by this benchmark on `windows-latest` CI (run 34075450968: 12/15
+cases erroring with `SpillCapabilityError`, 15/15 fidelity fails) and
+confirmed by an in-CI diagnostic (run 34075741893):
+
+- At the pinned commit, `resolve_spill_capability`
+  (`tools/tool_result_storage.py` L278–281) opens the ciphertext with
+  `os.open(path, os.O_RDONLY | _O_NOFOLLOW | O_NONBLOCK)` — **without
+  `os.O_BINARY`**. On Windows the CRT then reads in text mode.
+- Measured on the runner: a 5,028-byte ciphertext file read back as **121
+  bytes** in default (text) mode — truncated at the first `0x1A` (Ctrl+Z)
+  byte of the random ciphertext, with CRLF folding as a second corruption
+  source. Reading the same file with `os.O_BINARY` returned all 5,028 bytes
+  and decrypted round-trip **byte-exact**; decrypting the text-mode read
+  failed with `InvalidTag`.
+- Consequence: on Windows, every same-session recovery fails with
+  `SpillCapabilityError`. The failure is **closed** — availability loss,
+  never wrong bytes: scope, AEAD tag, and digest all still verify when the
+  read is done correctly. There is no integrity or confidentiality impact.
+- The write path is unaffected (`os.fdopen(fd, "wb")` is binary), which is
+  why the asymmetry went unnoticed: upstream's own Windows suite
+  (`tests/tools/test_tool_result_capability.py`) also fails — 4 tests
+  deterministically, 1 (`test_handler_forwards_hidden_session_scope`)
+  flakily, since small ciphertexts only sometimes contain `0x1A`/CRLF.
+
+**How the benchmark treats it (no patching, no fake pass):** the pinned
+module is measured as-is. `fidelity_exact_bytes` records the module's real
+resolve result (`false` on Windows). On Windows only, a case whose sole
+deviation is this documented bug is reported as `KNOWN-ISSUE (payload
+intact)`: the artifact is verified intact at rest via an explicit
+`O_BINARY` read using the module's own scope/filename/key/AAD derivation
+(`_binary_read_resolve` in `run_benchmarks.py`), and `--check` accepts only
+that exact deviation on that platform. Any other failure, on any platform,
+fails the check. In CI, the 5 resolve-dependent upstream tests are
+deselected from the Windows gate (documented in `ci.yml`) and run in a
+non-gating step so a future fixed upstream commit becomes visible.
+
+**Upstream fix:** add `os.O_BINARY` (via `getattr(os, "O_BINARY", 0)`) to
+the resolve-side `os.open()`. Worth proposing on PR #89582.
+
+**CI status:** full matrix green (run 34076237564 — ubuntu/macos/windows ×
+py3.11/3.12 benchmark legs + Windows reparse job). Windows legs report
+`known-upstream-issue: 15`; POSIX legs report true 100% fidelity.
 
 ## Honest limits
 
